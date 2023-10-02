@@ -12,6 +12,8 @@
 #define OPTICAL
 #define SAMPLE_FREQUENCY_HZ 96000
 
+void exit(int);
+
 #ifdef OPTICAL
 on tile[0]: in              port    p_spdif_rx      = XS1_PORT_1O; // Optical rx
 on tile[1]: out buffered    port:32 p_spdif_tx      = XS1_PORT_1G; // Optical tx
@@ -173,6 +175,15 @@ void handle_samples(streaming chanend c)
         outwords[i] = tmp;
     }
     
+/*     for(int i = 0; i<500;i++)
+    {
+        //printf("outwords[%d] = 0x%08X, 0x%08X, 0x%08X, 0x%08X, \n", i, outwords[i], outwords[i]<<1, outwords[i]<<2, outwords[i]<<3);
+        printf("outwords[%d] = 0x%08X\n", i, outwords[i]);
+    }
+    exit(1); */
+    
+    
+    
     // Known channel status block data.
     unsigned cs_block_l[6] = {0x0A107A04, 0x0000000B, 0x00000000, 0x00000000, 0x00000000, 0x00000000};
     unsigned cs_block_r[6] = {0x0A207A04, 0x0000000B, 0x00000000, 0x00000000, 0x00000000, 0x00000000};
@@ -233,7 +244,7 @@ void handle_samples(streaming chanend c)
                 if (checkword != expected)
                 {
                     errors++;
-                    //printf("Error checkword 0x%08X, expected 0x%08X, i %d, j %d\n", checkword, expected, i, j);
+                    printf("Error checkword 0x%08X, expected 0x%08X, i %d, j %d\n", checkword, expected, i, j);
                 }
                 else
                 {
