@@ -182,11 +182,29 @@ void handle_samples(streaming chanend c)
     }
     exit(1); */
     
+    #define CHAN_STAT_44100    (0x00000000)
+    #define CHAN_STAT_48000    (0x02000000)
+    #define CHAN_STAT_88200    (0x08000000)
+    #define CHAN_STAT_96000    (0x0A000000)
+    #define CHAN_STAT_176400   (0x0C000000)
+    #define CHAN_STAT_192000   (0x0E000000)
+
+    // Known channel status block data. Needs sample rate bits OR'ing in.
+    unsigned cs_block_l[6] = {0x00107A04, 0x0000000B, 0x00000000, 0x00000000, 0x00000000, 0x00000000};
+    unsigned cs_block_r[6] = {0x00207A04, 0x0000000B, 0x00000000, 0x00000000, 0x00000000, 0x00000000};
     
-    
-    // Known channel status block data.
-    unsigned cs_block_l[6] = {0x0A107A04, 0x0000000B, 0x00000000, 0x00000000, 0x00000000, 0x00000000};
-    unsigned cs_block_r[6] = {0x0A207A04, 0x0000000B, 0x00000000, 0x00000000, 0x00000000, 0x00000000};
+    // Or in the sampling frequency bits into the channel status block.
+    switch(SAMPLE_FREQUENCY_HZ)
+    {
+        //case 32000:
+        case 44100:  cs_block_l[0] |= CHAN_STAT_44100;  cs_block_r[0] |= CHAN_STAT_44100;   break;
+        case 48000:  cs_block_l[0] |= CHAN_STAT_48000;  cs_block_r[0] |= CHAN_STAT_48000;   break;
+        case 88200:  cs_block_l[0] |= CHAN_STAT_88200;  cs_block_r[0] |= CHAN_STAT_88200;   break;
+        case 96000:  cs_block_l[0] |= CHAN_STAT_96000;  cs_block_r[0] |= CHAN_STAT_96000;   break;
+        case 176400: cs_block_l[0] |= CHAN_STAT_176400; cs_block_r[0] |= CHAN_STAT_176400;  break;
+        case 192000: cs_block_l[0] |= CHAN_STAT_192000; cs_block_r[0] |= CHAN_STAT_192000;  break;
+        default:     cs_block_l[0] |= CHAN_STAT_44100;  cs_block_r[0] |= CHAN_STAT_44100;   break;
+    }
     
     // Manually parse the output words to look for errors etc.
     // Based on known TX samples.
@@ -270,7 +288,20 @@ void board_setup(void)
 
     // Wait for power supplies to be up and stable.
     delay_milliseconds(10);
+}
 
+void dummy_thread(int thread)
+{
+    unsigned i=0;
+
+    while(1)
+    {
+        i+=4;
+        if (i == 0)
+        {
+            printf("thread %d\n", thread);
+        }
+    }
 }
 
 int main(void) {
@@ -285,6 +316,12 @@ int main(void) {
             while(1) {};
         }
         on tile[0]: handle_samples(c_spdif_rx);
+        on tile[0]: dummy_thread(0);
+        on tile[0]: dummy_thread(1);
+        on tile[0]: dummy_thread(2);
+        on tile[0]: dummy_thread(3);
+        on tile[0]: dummy_thread(4);
+        on tile[0]: dummy_thread(5);
         on tile[1]: {
             spdif_tx_port_config(p_spdif_tx, clk_spdif_tx, p_mclk_in, 0);
             start_clock(clk_spdif_tx);

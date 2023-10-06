@@ -52,13 +52,15 @@ void spdif_receive_shutdown(streaming chanend c)
 #else
 
 void spdif_rx_441(streaming chanend c, buffered in port:32 p);
+void spdif_rx_441_2X(streaming chanend c, buffered in port:32 p);
 void spdif_rx_48(streaming chanend c, buffered in port:32 p);
 void spdif_rx_48_2X(streaming chanend c, buffered in port:32 p);
-int check_clock_div(buffered in port:32 p);
+int check_clock_div(buffered in port:32 p, unsigned decode_2x);
 
 void spdif_rx(streaming chanend c, in port p, clock clk, unsigned sample_freq_estimate)
 {
-    //unsigned sample_rate = sample_freq_estimate;
+    unsigned sample_rate = sample_freq_estimate;
+    unsigned clock_div, decode_2x, next_sr;
 
     in port * movable pp = &p;
     in buffered port:32 * movable p_buf = reconfigure_port(move(pp), in buffered port:32);
@@ -66,46 +68,49 @@ void spdif_rx(streaming chanend c, in port p, clock clk, unsigned sample_freq_es
     // Configure spdif rx port to be clocked from spdif_rx clock defined below.
     configure_in_port(*p_buf, clk);
 
-/*     while(1)
-    { */
-        // Determine 100MHz clock divider
-        //unsigned clock_div = 96001/sample_rate;
-        unsigned clock_div = 0;
+    while(1)
+    {
+        // Determine operating mode and next sample rate to try from current sample rate.
+        switch(sample_rate)
+        {
+            case 32000:  clock_div = 3; decode_2x = 0; next_sr = 44100;  break;
+            case 44100:  clock_div = 1; decode_2x = 1; next_sr = 48000;  break;
+            case 48000:  clock_div = 1; decode_2x = 1; next_sr = 88200;  break;
+            case 88200:  clock_div = 0; decode_2x = 1; next_sr = 96000;  break;
+            case 96000:  clock_div = 0; decode_2x = 1; next_sr = 176400; break;
+            case 176400: clock_div = 0; decode_2x = 0; next_sr = 192000; break;
+            case 192000: clock_div = 0; decode_2x = 0; next_sr = 32000;  break;
+            default:     clock_div = 0; decode_2x = 0; next_sr = 48000;  break;
+        }
 
         // Stop clock so we can reconfigure it
         stop_clock(clk);
-
         // Set the desired clock div
         configure_clock_ref(clk, clock_div);
-
         // Start the clock block running. Port timer will be reset here.
         start_clock(clk);
 
-        // Check our clock div value is correct
-/*         if (check_clock_div(*p_buf) == 0)
+        if (check_clock_div(*p_buf, decode_2x) == 0) // Check the input signal is roughly matched to the decode rate specified
         {
             if(sample_rate % 44100)
-                spdif_rx_48(c, *p_buf);
+            {
+                if (decode_2x)
+                    spdif_rx_48_2X(c, *p_buf);
+                else
+                    spdif_rx_48(c, *p_buf);
+            }
             else
-                spdif_rx_441(c, *p_buf);
-        } */
-        printf("enter\n");
-        spdif_rx_48_2X(c, *p_buf);
-        printf("exited\n");
+            {
+                if (decode_2x)
+                    spdif_rx_441_2X(c, *p_buf);
+                else
+                    spdif_rx_441(c, *p_buf);
+            }
+        }
 
-        // Get next sample rate from current sample rate.
-/*         switch(sample_rate)
-        {
-            case 32000:  sample_rate = 44100;  break;
-            case 44100:  sample_rate = 48000;  break;
-            case 48000:  sample_rate = 88200;  break;
-            case 88200:  sample_rate = 96000;  break;
-            case 96000:  sample_rate = 176400; break;
-            case 176400: sample_rate = 192000; break;
-            case 192000: sample_rate = 32000;  break;
-            default:     sample_rate = 48000;  break;
-        } */
- //   }
+        // Update sample rate
+        sample_rate = next_sr;
+    }
 
     // Set pointers and ownership back to original state if SpdifReceive() exits (currently unreachable)
     pp = reconfigure_port(move(p_buf), in port);

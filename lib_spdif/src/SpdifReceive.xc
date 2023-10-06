@@ -37,10 +37,11 @@ static inline int xor4(int idata1, int idata2, int idata3, int idata4)
 // Lookup tables for port time adder based on where the reference transition was.
 // Index can be max of 32 so need 33 element array.
 // Index 0 is never used.
-const unsigned error_lookup_441[33] = {0,36,36,35,35,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42};
-const unsigned error_lookup_48[33]     = {0,33,33,32,32,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39};
+const unsigned error_lookup_441[33]     = {0,36,36,35,35,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42};
+const unsigned error_lookup_48[33]      = {0,33,33,32,32,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39,39};
 
-const unsigned error_lookup_48_2X[33]  = {0,33,33,33,32,32,32,32,32,32,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46};
+const unsigned error_lookup_441_2X[33]  = {0,36,36,36,36,35,35,35,35,49,49,49,49,49,49,49,49,49,49,49,49,49,49,49,49,49,49,49,49,49,49,49,49};
+const unsigned error_lookup_48_2X[33]   = {0,33,33,33,32,32,32,32,32,32,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46,46};
 
 #pragma unsafe arrays
 static inline void spdif_rx_8UI_48(buffered in port:32 p, unsigned &t, unsigned &sample, unsigned &outword, unsigned &unlock_cnt)
@@ -68,29 +69,21 @@ static inline void spdif_rx_8UI_48(buffered in port:32 p, unsigned &t, unsigned 
     outword |= unscramble_0x04040404_0xF[crc];
 }
 
+// 6, 22 is middle of data eye. 5, 21 works better for optical at limit as ISI makes shorts shorter so second half of eye shifted earlier.
+#define SAMP_BIT_LO_48  5
+#define SAMP_BIT_HI_48  21
+
 #pragma unsafe arrays
 static inline void spdif_rx_8UI_48_2X(buffered in port:32 p, unsigned &t, unsigned &sample1, unsigned &sample2, unsigned &outword, unsigned &unlock_cnt)
 {
-    unsigned crc;
     unsigned ref_tran;
-
-    // 48k standard
-    //unsigned unscramble_0x00400040_0x3[4] = {0x20000000, 0x10000000, 0x30000000, 0x00000000};
-    
-    //unsigned unscramble_0x00100010_0x3[4] = {0x40000000, 0xC0000000, 0x80000000, 0x00000000}; //4,20
-    unsigned unscramble_0x00200020_0x3[4] = {0xC0000000, 0x80000000, 0x40000000, 0x00000000}; //5,21
-    //unsigned unscramble_0x00400040_0x3[4] = {0x80000000, 0x40000000, 0xC0000000, 0x00000000}; //6,22
-    //unsigned unscramble_0x00800080_0x3[4] = {0x40000000, 0xC0000000, 0x80000000, 0x00000000}; // 7,23
     
     // First 4UI - default time
     asm volatile("in %0, res[%1]" : "=r"(sample1)  : "r"(p));
-    //ref_tran = cls(sample<<9); // Expected value is 2 Possible values are 1 to 32.
     t += 33;
     asm volatile("setpt res[%0], %1"::"r"(p),"r"(t));
-    crc = sample1 & 0x00200020;
-    crc32(crc, 0x3, 0x3);
     outword >>= 2;
-    outword |= unscramble_0x00200020_0x3[crc];
+    outword |= ((sample1 & (1<<SAMP_BIT_HI_48)) << (31-SAMP_BIT_HI_48)) | ((sample1 & (1<<SAMP_BIT_LO_48)) << (30-SAMP_BIT_LO_48));
 
     // Now receive data - second 4UI
     asm volatile("in %0, res[%1]" : "=r"(sample2)  : "r"(p));
@@ -98,14 +91,9 @@ static inline void spdif_rx_8UI_48_2X(buffered in port:32 p, unsigned &t, unsign
     t += error_lookup_48_2X[ref_tran]; // Lookup next port time based off where current transition was.
     asm volatile("setpt res[%0], %1"::"r"(p),"r"(t));
     if (ref_tran > 8)
-    {
       unlock_cnt++;
-      //printf(".\n");
-    }
-    crc = sample2 & 0x00200020;
-    crc32(crc, 0x3, 0x3);
     outword >>= 2;
-    outword |= unscramble_0x00200020_0x3[crc];
+    outword |= ((sample2 & (1<<SAMP_BIT_HI_48)) << (31-SAMP_BIT_HI_48)) | ((sample2 & (1<<SAMP_BIT_LO_48)) << (30-SAMP_BIT_LO_48));
 }
 
 #pragma unsafe arrays
@@ -132,6 +120,33 @@ static inline void spdif_rx_8UI_441(buffered in port:32 p, unsigned &t, unsigned
     crc32(crc, 0xF, 0xF);
     outword >>= 4;
     outword |= unscramble_0x08040201_0xF[crc];
+}
+
+// Orig settings 4,22. 4 is middle of "perfect" coax data eye from testing. 21 or 22 is middle of eye. not much in it. Pick 21.
+#define SAMP_BIT_LO_441 4
+#define SAMP_BIT_HI_441 21
+
+#pragma unsafe arrays
+static inline void spdif_rx_8UI_441_2X(buffered in port:32 p, unsigned &t, unsigned &sample1, unsigned &sample2, unsigned &outword, unsigned &unlock_cnt)
+{
+    unsigned ref_tran;
+    
+    // First 4UI - default time
+    asm volatile("in %0, res[%1]" : "=r"(sample1)  : "r"(p));
+    t += 35;
+    asm volatile("setpt res[%0], %1"::"r"(p),"r"(t));
+    outword >>= 2;
+    outword |= ((sample1 & (1<<SAMP_BIT_HI_441)) << (31-SAMP_BIT_HI_441)) | ((sample1 & (1<<SAMP_BIT_LO_441)) << (30-SAMP_BIT_LO_441));
+
+    // Now receive data - second 4UI
+    asm volatile("in %0, res[%1]" : "=r"(sample2)  : "r"(p));
+    ref_tran = cls(sample2<<19); // Expected value is 4 Possible values are 1 to 32.
+    t += error_lookup_441_2X[ref_tran]; // Lookup next port time based off where current transition was.
+    asm volatile("setpt res[%0], %1"::"r"(p),"r"(t));
+    if (ref_tran > 8)
+      unlock_cnt++;
+    outword >>= 2;
+    outword |= ((sample2 & (1<<SAMP_BIT_HI_441)) << (31-SAMP_BIT_HI_441)) | ((sample2 & (1<<SAMP_BIT_LO_441)) << (30-SAMP_BIT_LO_441));
 }
 
 void spdif_rx_48(streaming chanend c, buffered in port:32 p)
@@ -192,29 +207,19 @@ void spdif_rx_48_2X(streaming chanend c, buffered in port:32 p)
     while(unlock_cnt < 64)
     {
         spdif_rx_8UI_48_2X(p, t, sample1, sample2, outword, unlock_cnt);
-        //printf("L\n");
-        if (cls(sample2) > 18) // Last three bits of old subframe and first "bit" of preamble.
+        if (cls(sample2) > 18) // Last bit of old subframe and first "bit" of preamble.
         {
             outword = xor4(outword, (outword << 1), 0xFFFFFFFF, z_pre_sample); // This achieves the xor decode plus inverting the output in one step.
             outword <<= 1;
-            //outword >>= 1;
-            //printf("sample 0x%08X\n", sample);
-            //c <: sample;
             c <: outword;
 
             spdif_rx_8UI_48_2X(p, t, sample1, sample2, outword, unlock_cnt);
-            //c <: sample1;
             z_pre_sample = sample1;
             spdif_rx_8UI_48_2X(p, t, sample1, sample2, outword, unlock_cnt);
-            //z_pre_sample = bitrev(z_pre_sample);
             spdif_rx_8UI_48_2X(p, t, sample1, sample2, outword, unlock_cnt);
             spdif_rx_8UI_48_2X(p, t, sample1, sample2, outword, unlock_cnt);
             if (cls(z_pre_sample) > 10)
-            //if (cls(z_pre_sample<<5) < 10)
-            {
-              //c <: z_pre_sample;
               z_pre_sample = 2;
-            }
             else
               z_pre_sample = 0;
             spdif_rx_8UI_48_2X(p, t, sample1, sample2, outword, unlock_cnt);
@@ -264,18 +269,68 @@ void spdif_rx_441(streaming chanend c, buffered in port:32 p)
     }
 }
 
+void spdif_rx_441_2X(streaming chanend c, buffered in port:32 p)
+{
+    unsigned sample1, sample2;
+    unsigned outword = 0;
+    unsigned z_pre_sample = 0;
+    unsigned unlock_cnt = 0;
+    unsigned t;
+
+    // Read the port counter and add a bit.
+    p :> void @ t; // read port counter
+    t+= 100;
+    // Note, this is inline asm since xc can only express a timed input/output
+    asm volatile("setpt res[%0], %1"::"r"(p),"r"(t));
+
+    // Now receive data
+    while(unlock_cnt < 64)
+    {
+        spdif_rx_8UI_441_2X(p, t, sample1, sample2, outword, unlock_cnt);
+        if (cls(sample2) > 19) // Last one bit of old subframe and first "bit" of preamble.
+        {
+            outword = xor4(outword, (outword << 1), 0xFFFFFFFF, z_pre_sample); // This achieves the xor decode plus inverting the output in one step.
+            outword <<= 1;
+            c <: outword;
+
+            spdif_rx_8UI_441_2X(p, t, sample1, sample2, outword, unlock_cnt);
+            z_pre_sample = sample1;
+            spdif_rx_8UI_441_2X(p, t, sample1, sample2, outword, unlock_cnt);
+            spdif_rx_8UI_441_2X(p, t, sample1, sample2, outword, unlock_cnt);
+            spdif_rx_8UI_441_2X(p, t, sample1, sample2, outword, unlock_cnt);
+            if (cls(z_pre_sample) > 10)
+              z_pre_sample = 2;
+            else
+              z_pre_sample = 0;
+            spdif_rx_8UI_441_2X(p, t, sample1, sample2, outword, unlock_cnt);
+            spdif_rx_8UI_441_2X(p, t, sample1, sample2, outword, unlock_cnt);
+            spdif_rx_8UI_441_2X(p, t, sample1, sample2, outword, unlock_cnt);
+        }
+    }
+}
+
 // This function checks the port clock is approximately the correct frequency
-int check_clock_div(buffered in port:32 p)
+// ToDo Improve this checking function, it is too course presently. Need to average pulse length or similar.
+int check_clock_div(buffered in port:32 p, unsigned decode_2x)
 {
     unsigned pulse_width;
     unsigned sample;
+    
     for(int i=0; i<100;i++) // Check 100 32bit samples
     {
         p :> sample;
         sample <<= cls(sample); // Shift off the top pulse (likely to not be a complete pulse)
         pulse_width = cls(sample);
-        if ((pulse_width < 2) || (pulse_width > 14))
-            return 1;
+        if (decode_2x)
+        {
+            if (pulse_width < 5)
+                return 1;
+        }
+        else
+        {
+            if ((pulse_width < 2) || (pulse_width > 16))
+                return 1;
+        }
     }
     return 0;
 }
