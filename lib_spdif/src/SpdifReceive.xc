@@ -309,30 +309,46 @@ void spdif_rx_441_2X(streaming chanend c, buffered in port:32 p)
     }
 }
 
-// This function checks the port clock is approximately the correct frequency
-// ToDo Improve this checking function, it is too course presently. Need to average pulse length or similar.
+// This function checks the input signal is approximately the correct sample rate for the given mode/clock setting.
 int check_clock_div(buffered in port:32 p, unsigned decode_2x)
 {
-    unsigned pulse_width;
     unsigned sample;
-    
-    for(int i=0; i<100;i++) // Check 100 32bit samples
+    unsigned max_pulse = 0;
+
+    // Flush the port
+    p :> void;
+    p :> void;
+
+    // Capture a large number of samples directly from the port and record the maximum pulse length seen.
+    // Need enough samples to ensure we get a realistic 3UI max pulse which only happen in the preambles.
+    // Only looking at leading pulse on each word which will be shorter than actual but due to async sampling
+    // will eventually move into timing to correctly capture correct length.
+    for(int i=0; i<2000;i++) // 2000 32 bit samples @ 100MHz takes 640us
     {
         p :> sample;
-        sample <<= cls(sample); // Shift off the top pulse (likely to not be a complete pulse)
-        pulse_width = cls(sample);
-        if (decode_2x)
+        if (cls(sample) > max_pulse)
         {
-            if (pulse_width < 5)
-                return 1;
-        }
-        else
-        {
-            if ((pulse_width < 2) || (pulse_width > 16))
-                return 1;
+            max_pulse = cls(sample);
         }
     }
-    return 0;
+    
+    // printf("max_pulse = %d\n", max_pulse);
+    // Check if the max_pulse is in expected range.
+    // Shortest expected is 3UI @ 96k = 244ns nominal. Sampled @ 10ns (decode_2x) = 24 bits. Sampled at 20ns (1x) = 12 bits.
+    // Longest expected is 3UI @ 88.2k = 266ns nominal but up to 300ns w/jitter.
+    // Sampled @ 10ns (decode_2x) = 31 bits. Sampled at 20ns (1x) = 16 bits.
+    // Note DC (all 0 or all 1s) will correctly fail (return 1) as max_pulse = 32.
+    if (decode_2x)
+    {
+        if ((max_pulse > 22) && (max_pulse < 32))
+            return 0;
+    }
+    else
+    {
+        if ((max_pulse > 11) && (max_pulse < 17))
+            return 0;
+    }
+    return 1;
 }
 
 #endif
