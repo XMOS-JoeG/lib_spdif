@@ -129,14 +129,6 @@ typedef enum bufferState
     BUFF_STATE_NORMAL,
 } bufferState_t;
 
-/* Returns 1 for bad parity, else 0 */
-static inline int BadParity(unsigned sample)
-{
-    unsigned X  = (sample >> 4);
-    crc32(X, 0, 1);
-    return X & 1;
-}
-
 #pragma unsafe arrays
 void buffer_control(streaming chanend c_spdif, server i2s_frame_callback_if i_i2s)
 {
@@ -146,9 +138,9 @@ void buffer_control(streaming chanend c_spdif, server i2s_frame_callback_if i_i2
     int bufferFill = 0;
     unsigned readPtr = 0;
     unsigned writePtr = 0;
-    unsigned refClkVal = 0;
     //int sampleCount = 0;
 
+    unsigned refClkVal = 0;
     p_pll_ref <: refClkVal;
 
     while(1)
@@ -160,7 +152,7 @@ void buffer_control(streaming chanend c_spdif, server i2s_frame_callback_if i_i2
                 refClkVal = ~refClkVal; // toggle pll ref clock value
                 p_pll_ref <: refClkVal; // output to port
 
-                if(BadParity(sample))
+                if(spdif_rx_check_parity(sample))
                 {   
                     continue;      // Ignore sample
                 }
