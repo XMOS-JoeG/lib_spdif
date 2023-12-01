@@ -1,9 +1,9 @@
 // Copyright 2023 XMOS LIMITED.
 // This Software is subject to the terms of the XMOS Public Licence: Version 1.
-
 #include <xs1.h>
 #include <xclib.h>
 #include <stdint.h>
+
 #include "spdif.h"
 
 static inline int cls(int idata)
@@ -60,14 +60,13 @@ static inline void spdif_rx_8UI(buffered in port:32 p, unsigned &t, unsigned &sa
 #pragma unsafe arrays
 int spdif_rx_decode(streaming chanend c, buffered in port:32 p, unsigned sample_rate)
 {
-    unsigned sample;
+    unsigned sample, raw_err;
     unsigned outword = 0;
     unsigned z_pre_sample = 0;
     unsigned unlock_cnt = 0;
     unsigned t;
     unsigned adder, mask, z_pre_len;
     unsigned dehash[16];
-    unsigned raw_err;
     unsigned pre_count = 0;
     unsigned char tmp; // used in exit function
 
